@@ -10,7 +10,7 @@ const UserService = {
   },
 
   createUser(userData) {
-    return apiClient.post('users', userData);
+    return apiClient.post('users/register', userData);
   },
 
   updateUser(id, userData) {
