@@ -1,208 +1,323 @@
 <template>
-  <div class="container mx-auto mt-8">
-    <!-- Filters -->
-    <div class="flex items-center space-x-4 mb-4">
-      <select v-model="selectedProject" class="border p-2 rounded">
-        <option value="">All projects</option>
-        <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.project_name }}</option>
-      </select>
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <div class="w-64 bg-blue-800 text-white p-4">
+      <h2 class="text-lg font-semibold mb-6">Navigation</h2>
+      <ul class="space-y-2">
+        <li class="font-medium">Category List</li>
 
-      <button class="bg-blue-500 text-white px-4 py-2 rounded" @click="applyFilter">APPLY FILTER</button>
+        <!-- Dynamically generated category list -->
+        <li v-for="category in categories" :key="category.id" class="mb-1">
+          <a
+            href="#"
+            @click.prevent="fetchProjectDetailsByCategory(category.id)"
+            class="nav-link transition">
+            {{ category.category_name }}
+          </a>
+        </li>
+
+      </ul>
     </div>
 
-    <!-- TreeGrid Table -->
-    <table class="table-auto w-full bg-white shadow-lg rounded-lg">
-      <thead>
-        <tr>
-          <th class="px-4 py-2">Project</th>
-          <th class="px-4 py-2">View Details</th>
-          <th class="px-4 py-2">Start Date</th>
-          <th class="px-4 py-2">Technologies Used</th>
-          <th class="px-4 py-2">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Loop through filtered projects -->
-        <template v-if="filteredProjects.length > 0">
-          <template v-for="(project, index) in filteredProjects" :key="project.id">
-            <tr class="bg-gray-100 cursor-pointer" @click="toggleProject(index)">
-              <td colspan="5" class="font-bold px-4 py-2 flex justify-between items-center">
-                <span>{{ project.project_name }}</span>
-                <span>{{ project.expanded ? '▼' : '▶' }}</span>
-              </td>
-            </tr>
-            <!-- Display project details if expanded -->
-            <tr v-if="project.expanded">
-              <td v-if="project.details.length > 0" colspan="5">
-                <table class="w-full">
-                  <thead>
-                    <tr>
-                      <th class="border px-4 py-2">Detail Description</th>
-                      <th class="border px-4 py-2">Image</th>
-                      <th class="border px-4 py-2">Start Date</th>
-                      <th class="border px-4 py-2">Technologies Used</th>
-                      <th class="border px-4 py-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="detail in project.details" :key="detail.id">
-                      <td class="border px-4 py-2 pl-8">{{ detail.detail_description }}</td>
-                      <td class="border px-4 py-2">
-                        <img :src="detail.image_url" alt="Detail Image" class="w-16 h-16" v-if="detail.image_url"/>
-                        <span v-else>No Image</span>
-                      </td>
-                      <td class="border px-4 py-2">{{ detail.start_date }}</td>
-                      <td class="border px-4 py-2">{{ detail.technologies_used }}</td>
-                      <td class="border px-4 py-2 flex space-x-2">
-                        <button class="bg-blue-500 text-white px-2 py-1 rounded" @click.stop="editDetail(detail)">✏️</button>
-                        <button class="bg-red-500 text-white px-2 py-1 rounded" @click.stop="deleteDetail(detail.id)">🗑️</button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </td>
-              <!-- No details available -->
-              <td v-else colspan="5" class="text-center border px-4 py-2">No details available for this project.</td>
-            </tr>
-          </template>
-        </template>
-        <template v-else>
-          <tr>
-            <td colspan="5" class="text-center py-4">No projects available. Adjust the filters and try again.</td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
+    <!-- Main Content -->
+    <div class="flex-1 p-8 bg-gray-100">
+      <!-- Top Bar with Filter and Add buttons -->
+      <div class="flex justify-between items-center mb-4">
+        <div class="flex items-center space-x-4">
+          <!-- Dropdown to filter by category -->
+          <select v-model="selectedCategory" @change="fetchProjectDetailsByCategory" class="border rounded px-4 py-2">
+            <option value="all">All categories</option>
+            <option v-for="category in categories" :key="category.id" :value="category.id">
+              {{ category.category_name }}
+            </option>
+          </select>
+
+          <!-- Search bar to search project details -->
+          <input
+            v-model="searchQuery"
+            @input="searchProjectDetails"
+            placeholder="Search for project details..."
+            class="border rounded px-4 py-2 w-64"
+          />
+        </div>
+
+        <!-- Add filter and Add new post buttons -->
+        <div class="flex space-x-4">
+          <button @click="addFilter" class="bg-gray-200 text-black px-4 py-2 rounded">+ Add filter</button>
+          <button @click="addNewCategory" class="bg-blue-500 text-white px-4 py-2 rounded">
+            + Add new Category
+          </button>
+        </div>
+      </div>
+
+      <!-- Breadcrumb (example based on CMS UI) -->
+      <div class="text-gray-500 mb-4">
+        Category > Project Details
+      </div>
+
+      <!-- Display project details in jqxGrid -->
+      <div id="jqxGrid" class="bg-white shadow-lg"></div>
+
+      <!-- Action buttons for expanding and collapsing groups -->
+      <div class="mt-8 flex space-x-4">
+        <button @click="expandAll" class="bg-blue-500 text-white px-4 py-2 rounded">Expand All</button>
+        <button @click="collapseAll" class="bg-gray-500 text-white px-4 py-2 rounded">Collapse All</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import ProjectService from '../services/ProjectService';
+import CategoryService from '../services/CategoryService';
 import ProjectDetailsService from '../services/ProjectDetailsService';
+import Swal from 'sweetalert2'; // Import SweetAlert
 
 export default {
   data() {
     return {
-      selectedProject: "",  // Holds the selected project ID
-      projects: [],         // Holds all projects
-      filteredProjects: [], // Filtered projects with their details
+      categories: [],          // Holds the category data fetched from the API
+      projectDetails: [],      // Holds the project details data for display
+      filteredProjectDetails: [], // Holds the filtered project details for search
+      selectedCategory: 'all', // Holds the selected category for filtering
+      searchQuery: ''          // Holds the search input for filtering project details
     };
   },
+  mounted() {
+    // Fetch categories and project details when the component is mounted
+    this.fetchCategories();
+    this.fetchProjectDetails();
+  },
   methods: {
-    // Fetch all projects from the API
-    async fetchProjects() {
+    // Fetch all categories and update the sidebar
+    async fetchCategories() {
       try {
-        const response = await ProjectService.getProjects();
-        console.log('Projects:', response.data); // Log to check projects
-        // Ensure that details are initialized as an empty array for each project
-        this.projects = response.data.map(project => ({
-          ...project,
-          details: [], // Initialize details as an empty array
-          expanded: false
+        const categories = await CategoryService.getAllCategories();
+        this.categories = categories.map(category => ({
+          ...category,
+          item_count: category.item_count || 0 // Assuming item_count is returned by the API
         }));
-        this.applyFilter();  // Apply the filter initially
       } catch (error) {
-        console.error('Error fetching projects:', error);
-        alert('An error occurred while fetching projects. Please try again later.');
+        console.error('Error fetching categories:', error);
       }
     },
 
-    // Fetch project details by project ID
-    async fetchProjectDetailsByProjectId(projectId) {
+    // Fetch all project details
+    async fetchProjectDetails() {
       try {
-        const response = await ProjectDetailsService.getProjectDetailById(projectId);
-        console.log('Project Details:', response.data); // Log to check details
-        return response.data || [];  // Ensure that it returns an array, even if empty
+        const projectDetails = await ProjectDetailsService.getAllProjectDetails();
+        this.projectDetails = projectDetails.data;
+        this.filteredProjectDetails = this.projectDetails;
+        this.initializeGrid(this.filteredProjectDetails);
       } catch (error) {
         console.error('Error fetching project details:', error);
-        alert('An error occurred while fetching project details. Please try again later.');
-        return []; // Return an empty array in case of an error
       }
     },
 
-    // Apply the filter to show projects based on the selected project
-    async applyFilter() {
-      if (this.selectedProject) {
-        try {
-          // Fetch details for the selected project
-          const details = await this.fetchProjectDetailsByProjectId(this.selectedProject);
-          this.filteredProjects = this.projects.map((project) => {
-            if (project.id === this.selectedProject) {
-              return { ...project, details, expanded: true };
-            }
-            return { ...project, details: [], expanded: false };
-          });
-        } catch (error) {
-          console.error('Error applying filter:', error);
-        }
+    // Fetch project details based on selected category
+    async fetchProjectDetailsByCategory(categoryId) {
+      this.selectedCategory = categoryId;
+      if (this.selectedCategory === 'all') {
+        this.filteredProjectDetails = this.projectDetails;
       } else {
-        // When no project is selected, show all projects without details
-        this.filteredProjects = this.projects.map((project) => ({
-          ...project,
-          details: [],  // Initialize details as an empty array
-          expanded: false
-        }));
+        this.filteredProjectDetails = this.projectDetails.filter(detail => detail.category_id === this.selectedCategory);
       }
+      this.initializeGrid(this.filteredProjectDetails);
     },
 
-    // Toggle project expansion
-    async toggleProject(index) {
-      const project = this.filteredProjects[index];
+    // Initialize the jqxGrid with project detail data
+    initializeGrid(data) {
+      const source = {
+        localdata: data,
+        datatype: 'array',
+        datafields: [
+          { name: 'id', type: 'number' },
+          { name: 'detail_description', type: 'string' },
+          { name: 'technologies_used', type: 'string' },
+          { name: 'image_url', type: 'string' },
+          { name: 'documentation_url', type: 'string' },
+          { name: 'created_at', type: 'date' },
+          { name: 'updated_at', type: 'date' }
+        ]
+      };
 
-      // Toggle expanded state
-      project.expanded = !project.expanded;
+      const dataAdapter = new $.jqx.dataAdapter(source);
 
-      // Only fetch details if the project is expanded and details are not already loaded
-      if (project.expanded && project.details.length === 0) {
-        try {
-          const details = await this.fetchProjectDetailsByProjectId(project.id);
-          // Directly update the filteredProjects array in Vue 3
-          this.filteredProjects[index] = { ...project, details };
-        } catch (error) {
-          console.error('Error fetching project details:', error);
+      // Initialize the jqxGrid
+      $("#jqxGrid").jqxGrid({
+        width: '100%', // Make the grid take the full width of the container
+        height: 500,   // Set the height for better display
+        source: dataAdapter,
+        columnsresize: true, // Enable column resizing
+        sortable: true,      // Enable column sorting
+        pageable: true,      // Enable pagination
+        pagesize: 10,        // Number of rows per page
+        columns: [
+          { text: 'Description', datafield: 'detail_description', width: 300 },
+          { text: 'Technologies Used', datafield: 'technologies_used', width: 150 },
+          {
+            text: 'Image URL',
+            datafield: 'image_url',
+            width: 150,
+            cellsrenderer: (row, column, value) => {
+              if (value) {
+                return '<span style="color: green;">✔️ Have Image</span>';
+              } else {
+                return '<span style="color: red;">✘ No Image</span>';
+              }
+            }
+          },
+          {
+            text: 'Documentation URL',
+            datafield: 'documentation_url',
+            width: 150,
+            cellsrenderer: (row, column, value) => {
+              if (value) {
+                return '<span style="color: green;">✔️ Have Documentation</span>';
+              } else {
+                return '<span style="color: red;">✘ No Documentation</span>';
+              }
+            }
+          },
+          { text: 'Created At', datafield: 'created_at', cellsformat: 'yyyy-MM-dd', width: 150 },
+          { text: 'Updated At', datafield: 'updated_at', cellsformat: 'yyyy-MM-dd', width: 150 },
+          {
+            text: 'Actions',
+            datafield: 'actions',
+            width: 150,
+            cellsrenderer: (row) => {
+              return `
+                <i class="fa fa-edit text-green-500 mr-4 cursor-pointer" onclick="window.vueInstance.editProjectDetail(${row})" title="Edit"></i>
+                <i class="fa fa-trash text-red-500 mr-4 cursor-pointer" onclick="window.vueInstance.confirmDelete(${row})" title="Delete"></i>
+                <i class="fa fa-eye text-blue-500 cursor-pointer" onclick="window.vueInstance.viewProjectDetail(${row})" title="View"></i>
+              `;
+            }
+          }
+        ]
+      });
+    },
+
+    // Method to search and filter project details based on the input
+    searchProjectDetails() {
+      const query = this.searchQuery.toLowerCase();
+      this.filteredProjectDetails = this.projectDetails.filter(detail => {
+        return (
+          detail.detail_description.toLowerCase().includes(query) ||
+          detail.technologies_used.toLowerCase().includes(query)
+        );
+      });
+      // Re-initialize the grid with the filtered data
+      this.initializeGrid(this.filteredProjectDetails);
+    },
+
+    // Method to confirm delete using SweetAlert
+    confirmDelete(row) {
+      const selectedDetail = this.projectDetails[row];
+
+      Swal.fire({
+        title: 'Are you sure?',
+        text: `You won't be able to revert this action!`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+      }).then(async (result) => {
+        if (result.isConfirmed) {
+          try {
+            await ProjectDetailsService.deleteProjectDetail(selectedDetail.id);
+            Swal.fire('Deleted!', `Project detail ${selectedDetail.detail_description} has been deleted.`, 'success');
+            this.fetchProjectDetails(); // Refresh the data after deletion
+          } catch (error) {
+            Swal.fire('Error!', 'There was an issue deleting the project detail.', 'error');
+          }
         }
-      }
+      });
     },
 
-    // Delete a project detail by ID
-    async deleteDetail(id) {
-      try {
-        await ProjectDetailsService.deleteProjectDetail(id);
-        this.applyFilter();  // Reload the details after deletion
-      } catch (error) {
-        console.error('Error deleting project detail:', error);
-        alert('An error occurred while deleting the project detail. Please try again later.');
-      }
+    // Method to add a new category (redirect to add category page)
+    addNewCategory() {
+      alert('Redirect to add new category page!');
     },
 
-    // Edit a project detail (placeholder for edit logic)
-    editDetail(detail) {
-      alert(`Edit detail: ${detail.id}`); // Placeholder action for editing
+    // Method to edit a project detail
+    editProjectDetail(row) {
+      const detail = this.projectDetails[row];
+      alert(`Edit Project Detail: ${detail.detail_description}`);
+    },
+
+    // Method to view a project detail
+    viewProjectDetail(row) {
+      const detail = this.projectDetails[row];
+      alert(`View Project Detail: ${detail.detail_description}`);
+    },
+
+    // Method to expand all groups
+    expandAll() {
+      $('#jqxGrid').jqxGrid('expandallgroups');
+    },
+
+    // Method to collapse all groups
+    collapseAll() {
+      $('#jqxGrid').jqxGrid('collapseallgroups');
+    },
+
+    // Add filter method (placeholder for functionality)
+    addFilter() {
+      alert('Add filter functionality goes here.');
     }
-  },
-  mounted() {
-    this.fetchProjects();
-  },
+  }
 };
 </script>
 
 <style scoped>
-.table-auto {
-  width: 100%;
-  border-collapse: collapse;
+
+/* Main layout styling */
+.container {
+  margin-top: 50px;
 }
 
-th,
-td {
-  border: 1px solid #ddd;
-  padding: 8px;
-}
-
-th {
-  background-color: #f2f2f2;
-}
-
+/* Button styling */
 button {
   cursor: pointer;
+}
+
+/* Input and Select styling */
+input, select {
+  border: 1px solid #ddd;
+  padding: 8px;
+  width: 250px;
+}
+
+/* Sidebar navigation styling */
+.sidebar a {
+  color: #63b3ed;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Sidebar link styling */
+.nav-link {
+  color: #cbd5e0; /* Gray color */
+  padding: 10px 15px;
+  display: block;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background-color: #2b6cb0; /* Blue background */
+  color: #ffffff; /* White text on hover */
+}
+
+/* Font Awesome icons */
+.fa {
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Optional CSS for additional table or button styling */
+.jqx-grid-filter-row {
+  border-top: 2px solid red;
+  border-bottom: 2px solid red;
 }
 </style>

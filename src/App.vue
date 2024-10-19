@@ -6,7 +6,7 @@
     <!-- Main content area -->
     <div class="flex-1 flex flex-col overflow-y-auto">
       <Header @toggleSidebar="isSidebarOpen = !isSidebarOpen" />
-      <main class="flex-1 p-6">
+      <main class="flex-1 pb-6">
         <router-view />
       </main>
     </div>

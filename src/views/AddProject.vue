@@ -1,5 +1,8 @@
 <template>
   <div class="container mx-auto mt-8 max-w-4xl">
+    <!-- Toast component -->
+    <Toast />
+
     <!-- Form Header -->
     <div class="text-center mb-10">
       <h1 class="text-3xl font-semibold text-gray-800">Add New Project, Detail & Category</h1>
@@ -30,7 +33,7 @@
           rows="5"
           required
         ></textarea>
-        <p class="text-sm text-gray-500 mt-1">Max 500 characters</p> <!-- Added character limit info -->
+        <p class="text-sm text-gray-500 mt-1">Max 500 characters</p>
       </div>
 
       <!-- Image Upload Section -->
@@ -62,12 +65,15 @@
       <div v-for="(detail, index) in form.details" :key="index" class="border border-gray-300 rounded-lg p-4 mb-6 bg-white shadow-lg">
         <div class="flex justify-between mb-2">
           <div class="flex-grow mr-4">
-            <label class="block text-gray-700">Add Category *</label>
-            <input v-model="detail.category_name" type="text" class="w-full px-4 py-2 border rounded" required />
+            <label class="block text-gray-700">Select Category *</label>
+            <select v-model="detail.category_id" class="w-full px-4 py-2 border rounded" required>
+              <option v-for="category in categories" :key="category.id" :value="category.id">
+                {{ category.category_name }}
+              </option>
+            </select>
           </div>
-          <!-- Show delete icon only if more than one category -->
           <button v-if="form.details.length > 1" @click="removeDetail(index)" class="text-red-500">
-            <i class="fas fa-trash fa-2x"></i> <!-- Increased size of trash icon to fa-2x -->
+            <i class="fas fa-trash fa-2x"></i>
           </button>
         </div>
         <div class="mb-4">
@@ -80,7 +86,7 @@
             rows="4"
             required
           ></textarea>
-          <p class="text-sm text-gray-500 mt-1">Max 500 characters</p> <!-- Character limit for detail description -->
+          <p class="text-sm text-gray-500 mt-1">Max 500 characters</p>
         </div>
         <div class="mb-4">
           <label class="block text-gray-700">Technologies Used *</label>
@@ -125,22 +131,58 @@
         </div>
       </div>
 
-      <!-- Button with Icon for Adding Category -->
+      <!-- Button with Icon for Adding Detail -->
       <button @click="addDetail" class="bg-blue-500 text-white px-4 py-2 rounded mb-4 flex items-center">
+        <i class="fas fa-plus mr-2"></i> Add Detail
+      </button>
+
+      <!-- Button with Icon for Adding Category -->
+      <button @click="showCategoryModal = true" class="bg-green-500 text-white px-4 py-2 rounded mb-4 flex items-center">
         <i class="fas fa-plus mr-2"></i> Add Category
       </button>
     </div>
 
-    <!-- Submit Button with Icon -->
+    <!-- Submit Button with Loading State -->
     <div class="flex justify-end mt-6">
-      <button @click="submitAll" class="bg-blue-500 text-white px-4 py-2 rounded flex items-center">
-        <i class="fas fa-paper-plane mr-2"></i> Submit
+      <button @click="submitAll" class="bg-blue-500 text-white px-4 py-2 rounded flex items-center" :disabled="loading">
+        <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+        {{ loading ? 'Submitting...' : 'Submit' }}
       </button>
+    </div>
+
+    <!-- Category Modal -->
+    <div v-if="showCategoryModal" class="fixed inset-0 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-lg z-50">
+        <h2 class="text-xl font-bold mb-4">Add New Category</h2>
+        <div class="mb-4">
+          <label class="block text-gray-700">Category Name *</label>
+          <input v-model="newCategory.category_name" type="text" class="w-full px-4 py-2 border rounded" required />
+        </div>
+        <div class="flex justify-end">
+          <!-- Loading Button -->
+          <button
+            @click="addCategory"
+            class="bg-green-500 text-white px-4 py-2 rounded mr-2 flex items-center"
+            :disabled="loading"
+          >
+            <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+            {{ loading ? 'Adding...' : 'Add Category' }}
+          </button>
+          <button @click="closeModal" class="bg-gray-500 text-white px-4 py-2 rounded">
+            Close
+          </button>
+        </div>
+      </div>
+      <div class="fixed inset-0 bg-gray-900 bg-opacity-50"></div>
     </div>
   </div>
 </template>
 
 <script>
+import ProjectService from '../services/ProjectService';
+import CategoryService from '../services/CategoryService';
+import { useToast } from 'primevue/usetoast'; // Import PrimeVue Toast hook
+
 export default {
   data() {
     return {
@@ -151,9 +193,10 @@ export default {
         description: '',
         image_url: '',
         image_name: '',
+        profile_id: 1,
         details: [
           {
-            category_name: '',
+            category_id: '',
             description: '',
             technologies_used: '',
             image_url: '',
@@ -163,27 +206,65 @@ export default {
           }
         ]
       },
+      categories: [],
       imageUploadRefs: [],
-      fileUploadRefs: []
+      fileUploadRefs: [],
+      showCategoryModal: false,
+      newCategory: {
+        category_name: ''
+      },
+      loading: false, // Added loading state
     };
   },
+  mounted() {
+    this.fetchCategories();
+  },
+  setup() {
+    const toast = useToast(); // Initialize toast
+
+    return { toast };
+  },
   methods: {
-    // Trigger main image upload
+    async fetchCategories() {
+      try {
+        const response = await CategoryService.getAllCategories();
+        this.categories = response;
+      } catch (error) {
+        this.toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to fetch categories', life: 3000 });
+      }
+    },
+    async addCategory() {
+      this.loading = true; // Enable loading spinner
+      try {
+        const category = await CategoryService.createCategory(this.newCategory);
+
+        if (category) {
+          this.categories.push(category);
+          this.toast.add({ severity: 'success', summary: 'Success', detail: 'Category added successfully!', life: 3000 });
+        } else {
+          throw new Error('Failed to add category');
+        }
+
+        this.closeModal();
+      } catch (error) {
+        this.toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to add category', life: 3000 });
+      } finally {
+        this.loading = false; // Disable loading spinner
+      }
+    },
+    closeModal() {
+      this.showCategoryModal = false;
+      this.newCategory.category_name = ''; // Reset category input
+    },
     triggerImageUpload() {
       this.$refs.imageUpload.click();
     },
-
-    // Trigger detail image upload
     triggerDetailImageUpload(index) {
       this.imageUploadRefs[index].click();
     },
-
-    // Trigger file upload for project detail
     triggerDetailFileUpload(index) {
       this.fileUploadRefs[index].click();
     },
-
-    // Set the dynamic refs for images
     setImageUploadRef(index) {
       return (el) => {
         if (el) {
@@ -191,8 +272,6 @@ export default {
         }
       };
     },
-
-    // Set the dynamic refs for files
     setFileUploadRef(index) {
       return (el) => {
         if (el) {
@@ -200,7 +279,6 @@ export default {
         }
       };
     },
-
     onImageUpload(event) {
       const file = event.target.files[0];
       if (file) {
@@ -208,7 +286,6 @@ export default {
         this.form.image_name = file.name;
       }
     },
-
     onDetailImageUpload(event, index) {
       const file = event.target.files[0];
       if (file) {
@@ -216,7 +293,6 @@ export default {
         this.form.details[index].image_name = file.name;
       }
     },
-
     onDetailFileUpload(event, index) {
       const file = event.target.files[0];
       if (file) {
@@ -224,10 +300,9 @@ export default {
         this.form.details[index].file_name = file.name;
       }
     },
-
     addDetail() {
       this.form.details.push({
-        category_name: '',
+        category_id: '',
         description: '',
         technologies_used: '',
         image_url: '',
@@ -236,21 +311,52 @@ export default {
         file_name: ''
       });
     },
-
     removeDetail(index) {
       this.form.details.splice(index, 1);
     },
-
     removeFile(index) {
       this.form.details[index].file_url = '';
       this.form.details[index].file_name = '';
     },
+    async submitAll() {
+      this.loading = true; // Enable loading spinner
+      try {
+        const formData = new FormData();
 
-    submitAll() {
-      alert('All information has been successfully submitted!');
-      this.resetForm();
+        formData.append('project_name', this.form.project_name);
+        formData.append('start_date', this.form.start_date);
+        formData.append('end_date', this.form.end_date);
+        formData.append('description', this.form.description);
+        formData.append('profile_id', this.form.profile_id);
+
+        if (this.$refs.imageUpload.files[0]) {
+          formData.append('project_image', this.$refs.imageUpload.files[0]);
+        }
+
+        this.form.details.forEach((detail, index) => {
+          formData.append(`details[${index}][category_id]`, detail.category_id);
+          formData.append(`details[${index}][description]`, detail.description);
+          formData.append(`details[${index}][technologies_used]`, detail.technologies_used);
+
+          if (this.imageUploadRefs[index] && this.imageUploadRefs[index].files[0]) {
+            formData.append(`details[${index}][detail_image]`, this.imageUploadRefs[index].files[0]);
+          }
+
+          if (this.fileUploadRefs[index] && this.fileUploadRefs[index].files[0]) {
+            formData.append(`details[${index}][detail_file]`, this.fileUploadRefs[index].files[0]);
+          }
+        });
+
+        const response = await ProjectService.createProject(formData);
+
+        this.toast.add({ severity: 'success', summary: 'Success', detail: 'Project successfully submitted!', life: 3000 });
+        this.resetForm();
+      } catch (error) {
+        this.toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to submit project', life: 3000 });
+      } finally {
+        this.loading = false; // Disable loading spinner
+      }
     },
-
     resetForm() {
       this.form = {
         project_name: '',
@@ -259,9 +365,10 @@ export default {
         description: '',
         image_url: '',
         image_name: '',
+        profile_id: 1,
         details: [
           {
-            category_name: '',
+            category_id: '',
             description: '',
             technologies_used: '',
             image_url: '',
