@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'https://api-profile-qwom.onrender.com/api',
+  baseURL: 'https://api-icg.onrender.com/api',
   // baseURL: 'http://localhost:3000/api',
   headers: {
     'Accept': 'application/json',
